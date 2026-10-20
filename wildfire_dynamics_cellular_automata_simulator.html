@@ -1,0 +1,1292 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wildfire Dynamics & Cellular Automata Simulator</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Chart.js for real-time telemetry -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- KaTeX for rendering mathematical equations -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#fff7ed',
+                            500: '#f97316',
+                            600: '#ea580c',
+                            900: '#7c2d12',
+                            dark: '#090d16',
+                            card: '#111827',
+                            border: '#1f2937'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'Menlo', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #060911;
+            color: #f3f4f6;
+            overflow: hidden;
+        }
+
+        /* Custom scrollbar aesthetics */
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0b0f19;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1f2937;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #374151;
+        }
+
+        /* Slider accent color styling */
+        input[type=range] {
+            accent-color: #f97316;
+        }
+
+        /* Dial Compass needles */
+        .compass-needle {
+            transition: transform 0.1s ease-out;
+            transform-origin: center;
+        }
+
+        /* Pulsing indicator */
+        @keyframes pulse-flame {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.6; transform: scale(1.08); }
+        }
+        .flame-active-glow {
+            animation: pulse-flame 2s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col justify-between text-slate-100 select-none">
+
+    <!-- Top Navigation Header -->
+    <header class="h-16 bg-slate-900/90 border-b border-slate-800/80 px-5 flex items-center justify-between shrink-0 backdrop-blur-md z-30">
+        <!-- Application Branding -->
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 via-red-600 to-amber-700 flex items-center justify-center shadow-lg shadow-orange-950/40 border border-orange-400/20">
+                <i class="fa-solid fa-fire-flame-curved text-white text-xl"></i>
+            </div>
+            <div>
+                <div class="flex items-center gap-2">
+                    <h1 class="font-bold text-slate-100 text-base tracking-tight">PYRO-DYNAMICS LAB</h1>
+                    <span class="text-[10px] font-mono font-semibold bg-orange-500/10 text-orange-400 border border-orange-500/30 px-2 py-0.5 rounded-full">v2.5 Math Kernel</span>
+                </div>
+                <p class="text-[11px] text-slate-400 font-medium">Cellular Automata & Rothermel Fire Spread Simulation Engine</p>
+            </div>
+        </div>
+
+        <!-- Center Location Selector -->
+        <div class="flex items-center gap-2 bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-1.5 shadow-inner">
+            <i class="fa-solid fa-earth-americas text-orange-400 text-xs"></i>
+            <span class="text-xs text-slate-400 font-medium">Location Domain:</span>
+            <select id="locationSelect" class="bg-transparent text-xs font-semibold text-orange-400 focus:outline-none cursor-pointer pr-1">
+                <option value="sierra" class="bg-slate-900 text-slate-100">Tahoe Basin (Sierra Nevada, CA)</option>
+                <option value="sanfernando" class="bg-slate-900 text-slate-100">San Fernando Scrub (Los Angeles, CA)</option>
+                <option value="bluemountains" class="bg-slate-900 text-slate-100">Blue Mountains Bushland (Australia)</option>
+                <option value="mediterranean" class="bg-slate-900 text-slate-100">Provence Pine Ridge (France)</option>
+                <option value="custom" class="bg-slate-900 text-slate-100">⚙️ Custom Geo-Coordinates...</option>
+            </select>
+            <button id="btnConfigureCustom" class="text-xs text-slate-400 hover:text-white ml-1 hidden transition" title="Configure Custom Terrain Parameters">
+                <i class="fa-solid fa-sliders"></i>
+            </button>
+        </div>
+
+        <!-- Right System Metrics & Action Controls -->
+        <div class="flex items-center gap-3">
+            <div class="hidden xl:flex items-center gap-2 bg-slate-950/60 px-3 py-1.5 rounded-lg border border-slate-800 text-xs">
+                <i class="fa-solid fa-location-crosshairs text-teal-400"></i>
+                <span class="text-slate-400">Lat/Lng:</span>
+                <span id="displayCoords" class="font-mono text-slate-200">38.9° N, 119.9° W</span>
+            </div>
+            
+            <button id="btnOpenMathModal" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-200 flex items-center gap-1.5 transition">
+                <i class="fa-solid fa-square-root-variable text-indigo-400"></i>
+                <span>Math Model</span>
+            </button>
+
+            <div class="flex items-center gap-2 bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/30 text-xs">
+                <i class="fa-solid fa-triangle-exclamation text-amber-400"></i>
+                <span class="text-slate-300 font-medium">FWI Index:</span>
+                <span id="valFireDanger" class="font-bold text-amber-400 font-mono">EXTREME</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Workspace Layout -->
+    <div class="flex-1 flex overflow-hidden">
+
+        <!-- Left Controls Sidebar (Physics & Tools) -->
+        <aside class="w-80 bg-slate-900/80 border-r border-slate-800/80 flex flex-col shrink-0 overflow-y-auto">
+            
+            <!-- Quick Scenario Presets -->
+            <div class="p-4 border-b border-slate-800 space-y-2">
+                <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                    <span><i class="fa-solid fa-bolt text-amber-400 mr-1"></i> Quick Scenarios</span>
+                </label>
+                <div class="grid grid-cols-2 gap-1.5">
+                    <button class="preset-btn px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 text-xs text-slate-300 transition text-left" data-preset="santa_ana">
+                        💨 Santa Ana Gale
+                    </button>
+                    <button class="preset-btn px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 text-xs text-slate-300 transition text-left" data-preset="summer_drought">
+                        ☀️ Summer Drought
+                    </button>
+                    <button class="preset-btn px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 text-xs text-slate-300 transition text-left" data-preset="ridge_trap">
+                        ⛰️ Canyon Trap
+                    </button>
+                    <button class="preset-btn px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 text-xs text-slate-300 transition text-left" data-preset="prescribed">
+                        🔥 Prescribed Burn
+                    </button>
+                </div>
+            </div>
+
+            <!-- Simulation Interaction Tools -->
+            <div class="p-4 border-b border-slate-800 space-y-2.5">
+                <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                    <i class="fa-solid fa-toolbox text-orange-400 mr-1"></i> Canvas Field Tools
+                </label>
+                <div class="grid grid-cols-2 gap-2">
+                    <button class="tool-btn active flex flex-col items-center justify-center p-2.5 rounded-xl border border-orange-500/60 bg-orange-500/20 text-orange-300 text-xs font-semibold gap-1 transition" data-tool="ignite">
+                        <i class="fa-solid fa-fire text-lg text-orange-400"></i>
+                        <span>Ignite Spark</span>
+                    </button>
+                    <button class="tool-btn flex flex-col items-center justify-center p-2.5 rounded-xl border border-slate-800 bg-slate-800/50 text-slate-400 hover:bg-slate-800 text-xs font-semibold gap-1 transition" data-tool="firebreak">
+                        <i class="fa-solid fa-trowel-bricks text-lg text-amber-400"></i>
+                        <span>Bulldozer Line</span>
+                    </button>
+                    <button class="tool-btn flex flex-col items-center justify-center p-2.5 rounded-xl border border-slate-800 bg-slate-800/50 text-slate-400 hover:bg-slate-800 text-xs font-semibold gap-1 transition" data-tool="water">
+                        <i class="fa-solid fa-plane-water text-lg text-cyan-400"></i>
+                        <span>Water Drop</span>
+                    </button>
+                    <button class="tool-btn flex flex-col items-center justify-center p-2.5 rounded-xl border border-slate-800 bg-slate-800/50 text-slate-400 hover:bg-slate-800 text-xs font-semibold gap-1 transition" data-tool="inspect">
+                        <i class="fa-solid fa-magnifying-glass-chart text-lg text-emerald-400"></i>
+                        <span>Inspect Cell</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Environmental Physics Parameters -->
+            <div class="p-4 space-y-4 border-b border-slate-800">
+                <div class="flex justify-between items-center">
+                    <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                        <i class="fa-solid fa-wind text-indigo-400 mr-1"></i> Microclimate Physics
+                    </label>
+                    <button id="btnResetPhysics" class="text-[11px] text-orange-400 hover:underline">Reset Defaults</button>
+                </div>
+
+                <!-- Ambient Temperature Slider -->
+                <div class="space-y-1">
+                    <div class="flex justify-between text-xs">
+                        <span class="text-slate-300"><i class="fa-solid fa-temperature-high text-red-400 w-4"></i> Temp ($T_{amb}$)</span>
+                        <span id="lblTemp" class="font-mono text-orange-400 font-bold">38 °C</span>
+                    </div>
+                    <input type="range" id="inputTemp" min="10" max="50" value="38" class="w-full h-1.5 bg-slate-800 rounded-lg cursor-pointer">
+                </div>
+
+                <!-- Wind Speed Slider -->
+                <div class="space-y-1">
+                    <div class="flex justify-between text-xs">
+                        <span class="text-slate-300"><i class="fa-solid fa-gauge-high text-teal-400 w-4"></i> Wind Speed ($U$)</span>
+                        <span id="lblWindSpeed" class="font-mono text-teal-300 font-bold">32 km/h</span>
+                    </div>
+                    <input type="range" id="inputWindSpeed" min="0" max="80" value="32" class="w-full h-1.5 bg-slate-800 rounded-lg cursor-pointer">
+                </div>
+
+                <!-- Wind Direction Compass Dial Slider -->
+                <div class="space-y-2 pt-1">
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="text-slate-300"><i class="fa-solid fa-compass text-indigo-400 w-4"></i> Wind Vector ($\phi_w$)</span>
+                        <span id="lblWindDir" class="font-mono text-indigo-300 font-bold">NE (45°)</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="relative w-10 h-10 bg-slate-950 rounded-full border border-slate-700 flex items-center justify-center shrink-0">
+                            <span class="absolute top-0.5 text-[8px] text-slate-500 font-bold">N</span>
+                            <span class="absolute bottom-0.5 text-[8px] text-slate-500 font-bold">S</span>
+                            <i id="compassNeedle" class="fa-solid fa-location-arrow text-orange-500 text-sm compass-needle" style="transform: rotate(45deg);"></i>
+                        </div>
+                        <input type="range" id="inputWindDir" min="0" max="359" value="45" class="w-full h-1.5 bg-slate-800 rounded-lg cursor-pointer">
+                    </div>
+                </div>
+
+                <!-- Relative Air Humidity -->
+                <div class="space-y-1">
+                    <div class="flex justify-between text-xs">
+                        <span class="text-slate-300"><i class="fa-solid fa-droplet text-blue-400 w-4"></i> Humidity ($RH$)</span>
+                        <span id="lblHumidity" class="font-mono text-cyan-400 font-bold">12 %</span>
+                    </div>
+                    <input type="range" id="inputHumidity" min="5" max="85" value="12" class="w-full h-1.5 bg-slate-800 rounded-lg cursor-pointer">
+                </div>
+
+                <!-- Vegetation Fuel Moisture -->
+                <div class="space-y-1">
+                    <div class="flex justify-between text-xs">
+                        <span class="text-slate-300"><i class="fa-solid fa-tree text-emerald-400 w-4"></i> Fuel Moisture ($M_f$)</span>
+                        <span id="lblDryness" class="font-mono text-amber-400 font-bold">8 % (Dry)</span>
+                    </div>
+                    <input type="range" id="inputDryness" min="3" max="40" value="8" class="w-full h-1.5 bg-slate-800 rounded-lg cursor-pointer">
+                </div>
+
+                <!-- Spotting / Ember Transport Factor -->
+                <div class="space-y-1">
+                    <div class="flex justify-between text-xs">
+                        <span class="text-slate-300"><i class="fa-solid fa-volcano text-amber-500 w-4"></i> Ember Spotting</span>
+                        <span id="lblSpotting" class="font-mono text-orange-400 font-bold">Moderate</span>
+                    </div>
+                    <input type="range" id="inputSpotting" min="0" max="10" value="4" class="w-full h-1.5 bg-slate-800 rounded-lg cursor-pointer">
+                </div>
+            </div>
+
+            <!-- Mathematical Mechanics Note -->
+            <div class="p-4 text-[11px] text-slate-400 bg-slate-950/60 mt-auto border-t border-slate-800 leading-relaxed">
+                <p><i class="fa-solid fa-circle-info text-indigo-400 mr-1"></i> <strong>Rothermel Dynamic:</strong> Propagation velocity $R$ escalates non-linearly with wind power $U^{1.4}$ and slope gradient $\tan^2(\theta)$. Click/drag canvas to apply active tool.</p>
+            </div>
+        </aside>
+
+        <!-- Center Interactive Viewport -->
+        <main class="flex-1 flex flex-col bg-slate-950 relative overflow-hidden">
+
+            <!-- Map View Layer Controls Overlay (Top Left) -->
+            <div class="absolute top-4 left-4 z-10 flex items-center bg-slate-900/90 p-1.5 rounded-xl border border-slate-800/80 shadow-2xl backdrop-blur-md gap-1">
+                <button class="layer-btn active px-3 py-1.5 rounded-lg text-xs font-semibold text-orange-400 bg-slate-800 border border-slate-700/80 transition flex items-center gap-1.5" data-layer="fire">
+                    <i class="fa-solid fa-fire text-orange-500"></i> Fire & Smoke
+                </button>
+                <button class="layer-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5" data-layer="thermal">
+                    <i class="fa-solid fa-temperature-arrow-up text-red-400"></i> Thermal Grid
+                </button>
+                <button class="layer-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5" data-layer="fuel">
+                    <i class="fa-solid fa-tree text-emerald-400"></i> Fuel Load
+                </button>
+                <button class="layer-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5" data-layer="elevation">
+                    <i class="fa-solid fa-mountain text-amber-400"></i> Topography $\nabla h$
+                </button>
+                <button class="layer-btn px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5" data-layer="wind">
+                    <i class="fa-solid fa-arrows-up-to-line text-indigo-400"></i> Wind Field
+                </button>
+            </div>
+
+            <!-- Canvas Container -->
+            <div id="canvasContainer" class="flex-1 w-full h-full relative cursor-crosshair flex items-center justify-center p-3">
+                <canvas id="simCanvas" class="rounded-xl border border-slate-800/80 shadow-2xl max-w-full max-h-full bg-slate-950 object-contain"></canvas>
+            </div>
+
+            <!-- Map Legend (Bottom Overlay) -->
+            <div class="absolute bottom-20 left-4 z-10 bg-slate-900/80 backdrop-blur-md px-3 py-2 rounded-xl border border-slate-800 text-[11px] flex items-center gap-3">
+                <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-emerald-800 inline-block border border-emerald-600"></span> Unburnt Vegetation</span>
+                <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-orange-500 inline-block flame-active-glow border border-red-500"></span> Active Flame Front</span>
+                <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-slate-900 inline-block border border-slate-700"></span> Charred Scar</span>
+                <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-amber-800 inline-block border border-amber-600"></span> Bulldozer Line</span>
+                <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-cyan-600 inline-block border border-cyan-400"></span> Retardant Line</span>
+            </div>
+
+            <!-- Bottom Simulation Execution Control Bar -->
+            <div class="h-16 bg-slate-900/90 border-t border-slate-800/80 flex items-center justify-between px-6 z-20 shrink-0">
+                <!-- Main Playback Actions -->
+                <div class="flex items-center gap-3">
+                    <button id="btnPlayPause" class="w-10 h-10 rounded-full bg-orange-600 hover:bg-orange-500 text-white flex items-center justify-center shadow-lg transition">
+                        <i id="playIcon" class="fa-solid fa-play text-sm ml-0.5"></i>
+                    </button>
+                    <button id="btnStep" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center border border-slate-700 transition" title="Step 1 Iteration Frame">
+                        <i class="fa-solid fa-forward-step text-xs"></i>
+                    </button>
+                    <button id="btnReset" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center border border-slate-700 transition" title="Re-initialize Grid State">
+                        <i class="fa-solid fa-rotate-left text-xs"></i>
+                    </button>
+                    <div class="h-6 w-[1px] bg-slate-800 mx-1"></div>
+                    <button id="btnExtinguish" class="px-3 py-1.5 rounded-lg bg-red-950/60 hover:bg-red-900/80 text-red-300 border border-red-800/50 text-xs font-medium transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-fire-extinguisher"></i> Suppress All Flames
+                    </button>
+                </div>
+
+                <!-- Iteration Speed Control -->
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-slate-400 font-medium">Clock Speed:</span>
+                    <div class="flex bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs gap-1">
+                        <button class="speed-btn px-2.5 py-1 rounded text-slate-400 hover:text-white" data-speed="0.5">0.5x</button>
+                        <button class="speed-btn active px-2.5 py-1 rounded bg-orange-600 text-white font-semibold" data-speed="1.0">1.0x</button>
+                        <button class="speed-btn px-2.5 py-1 rounded text-slate-400 hover:text-white" data-speed="2.0">2.0x</button>
+                        <button class="speed-btn px-2.5 py-1 rounded text-slate-400 hover:text-white" data-speed="4.0">4.0x</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Right Side Telemetry & Cell Inspection Dashboard -->
+        <aside class="w-80 bg-slate-900/80 border-l border-slate-800/80 flex flex-col shrink-0 overflow-y-auto">
+            
+            <!-- Real-time Metrics Grid -->
+            <div class="p-4 border-b border-slate-800 space-y-3">
+                <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                    <span><i class="fa-solid fa-chart-line text-cyan-400 mr-1"></i> Real-Time Telemetry</span>
+                    <span id="lblTimeStep" class="font-mono text-slate-500 font-normal">t = 0.0 hrs</span>
+                </label>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-3">
+                        <div class="text-[10px] text-slate-400 font-semibold uppercase">Total Burn Scar</div>
+                        <div id="statBurnedArea" class="text-base font-bold font-mono text-orange-400 mt-0.5">0 ha</div>
+                        <div id="statBurnedPct" class="text-[10px] text-slate-500">0.0% of domain</div>
+                    </div>
+
+                    <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-3">
+                        <div class="text-[10px] text-slate-400 font-semibold uppercase">Active Fronts</div>
+                        <div id="statActiveCells" class="text-base font-bold font-mono text-red-500 mt-0.5">0 cells</div>
+                        <div id="statSpreadVelocity" class="text-[10px] text-slate-500">0.0 m/min avg</div>
+                    </div>
+
+                    <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-3">
+                        <div class="text-[10px] text-slate-400 font-semibold uppercase">Peak Thermal Spot</div>
+                        <div id="statPeakTemp" class="text-base font-bold font-mono text-amber-400 mt-0.5">38 °C</div>
+                        <div class="text-[10px] text-slate-500">Radiant $T_{max}$</div>
+                    </div>
+
+                    <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-3">
+                        <div class="text-[10px] text-slate-400 font-semibold uppercase">Energy Release</div>
+                        <div id="statEnergyRelease" class="text-base font-bold font-mono text-teal-300 mt-0.5">0 MW</div>
+                        <div class="text-[10px] text-slate-500">By-product flux</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fire Growth Graph (Chart.js) -->
+            <div class="p-4 border-b border-slate-800 space-y-2">
+                <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                    <i class="fa-solid fa-chart-area text-purple-400 mr-1"></i> Burn Spread Dynamics ($dA/dt$)
+                </label>
+                <div class="h-36 w-full bg-slate-950/80 rounded-xl p-2 border border-slate-800/80">
+                    <canvas id="telemetryChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Spatial Cell Inspector Panel -->
+            <div class="p-4 space-y-3 flex-1 flex flex-col justify-between">
+                <div>
+                    <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
+                        <i class="fa-solid fa-crosshairs text-emerald-400 mr-1"></i> Differential Cell Inspector
+                    </label>
+
+                    <div id="inspectorCard" class="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-2 text-xs">
+                        <div class="flex justify-between items-center pb-2 border-b border-slate-800/80">
+                            <span class="text-slate-400">Grid Coordinates:</span>
+                            <span id="inspPos" class="font-mono text-slate-200 font-semibold">[ -- , -- ]</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-slate-400">State Vector:</span>
+                            <span id="inspState" class="font-semibold text-emerald-400">Unburnt</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-slate-400">Fuel Model ($w_0$):</span>
+                            <span id="inspFuel" class="font-mono text-slate-200">Dense Conifer Pine</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-slate-400">Slope Gradient ($\nabla h$):</span>
+                            <span id="inspSlope" class="font-mono text-amber-300">4.2% (Upward)</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-slate-400">Temperature ($T$):</span>
+                            <span id="inspTemp" class="font-mono text-orange-400 font-bold">38.0 °C</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-slate-400">Fuel Density ($L$):</span>
+                            <span id="inspLoad" class="font-mono text-cyan-300">100% Remaining</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="text-[11px] text-slate-500 text-center italic">
+                    Hover mouse over map grid to inspect cell dynamics
+                </div>
+            </div>
+
+        </aside>
+
+    </div>
+
+    <!-- Custom Location Configuration Modal -->
+    <div id="customGeoModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h3 class="text-base font-bold text-slate-100 flex items-center gap-2">
+                    <i class="fa-solid fa-earth-americas text-orange-500"></i> Geo-Spatial Profile Configurator
+                </h3>
+                <button id="btnCloseCustomModal" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block text-slate-300 mb-1 font-medium">Domain Name</label>
+                    <input type="text" id="inputCustomName" placeholder="e.g. Mount Rainier Slope, WA" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-orange-500">
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-slate-300 mb-1 font-medium">Latitude</label>
+                        <input type="text" id="inputCustomLat" placeholder="46.85° N" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-orange-500">
+                    </div>
+                    <div>
+                        <label class="block text-slate-300 mb-1 font-medium">Longitude</label>
+                        <input type="text" id="inputCustomLng" placeholder="121.76° W" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-orange-500">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-slate-300 mb-1 font-medium">Topographic Terrain Profile</label>
+                    <select id="selectCustomTerrain" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-orange-500">
+                        <option value="mountains">Steep Ridge Canyon & Dense Conifer</option>
+                        <option value="valley">Rolling Hills & Dry Chaparral</option>
+                        <option value="coastal">Coastal Slope & Coastal Scrub</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="flex gap-2 pt-2">
+                <button id="btnApplyCustomLoc" class="flex-1 py-2.5 bg-orange-600 hover:bg-orange-500 font-semibold text-xs text-white rounded-lg transition shadow-lg">Instantiate Domain Profile</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mathematical Foundations Documentation Modal -->
+    <div id="mathDocModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl">
+            <div class="flex justify-between items-center border-b border-slate-800 p-5 shrink-0">
+                <h3 class="text-base font-bold text-slate-100 flex items-center gap-2">
+                    <i class="fa-solid fa-square-root-variable text-indigo-400"></i> Mathematical Physics & Rothermel Equations
+                </h3>
+                <button id="btnCloseMathModal" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            
+            <div class="p-6 space-y-6 text-xs leading-relaxed overflow-y-auto text-slate-300">
+                <!-- Section 1 -->
+                <div class="space-y-2">
+                    <h4 class="text-sm font-bold text-orange-400">1. Rothermel Surface Fire Propagation Velocity</h4>
+                    <p>The rate of spread (ROS) vector $\vec{R}$ along direction $\theta$ is formulated as:</p>
+                    <div id="katexEq1" class="bg-slate-950 p-3 rounded-lg border border-slate-800 text-center font-mono"></div>
+                    <p class="text-slate-400">Where $I_r$ is reaction intensity, $\phi_w$ is the non-dimensional wind coefficient, $\phi_s$ is the topographic slope multiplier, $\rho_b$ is fuel bulk density, and $Q_{ig}$ is heat of pre-ignition.</p>
+                </div>
+
+                <!-- Section 2 -->
+                <div class="space-y-2">
+                    <h4 class="text-sm font-bold text-teal-400">2. Wind Vector ($\phi_w$) and Topographic Slope ($\phi_s$) Amplification</h4>
+                    <div id="katexEq2" class="bg-slate-950 p-3 rounded-lg border border-slate-800 text-center font-mono"></div>
+                    <p class="text-slate-400">Where $U$ is mid-flame wind speed, $\beta$ is fuel packing ratio, and $\tan(\theta)$ represents the directional slope gradient between adjacent spatial cells.</p>
+                </div>
+
+                <!-- Section 3 -->
+                <div class="space-y-2">
+                    <h4 class="text-sm font-bold text-purple-400">3. Continuous Cellular Automata Transition Rules</h4>
+                    <p>In our discretized grid space $\Omega \subset \mathbb{R}^2$, ignition probability $P(x, y, t)$ from a neighboring burning cell $(x', y')$ is governed by the tensor product:</p>
+                    <div id="katexEq3" class="bg-slate-950 p-3 rounded-lg border border-slate-800 text-center font-mono"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Mechanics & Physics Engine -->
+    <script>
+        // Grid Dimensions
+        const GRID_COLS = 110;
+        const GRID_ROWS = 75;
+
+        // Discrete States
+        const STATE_UNBURNT = 0;
+        const STATE_BURNING = 1;
+        const STATE_BURNED = 2;
+        const STATE_FIREBREAK = 3;
+        const STATE_RETARDANT = 4;
+        const STATE_WATER = 5;
+
+        // Fuel Model Types (w0 = fuel load t/ha)
+        const FUEL_WATER = 0;
+        const FUEL_GRASS = 1;      // Light grass (Fast ROS, low heat)
+        const FUEL_SCRUB = 2;      // Chaparral scrub
+        const FUEL_TIMBER = 3;     // Mixed timber
+        const FUEL_DENSE_PINE = 4; // High density pine forest
+
+        // Geo-Locations Preset Profiles
+        const GEO_PROFILES = {
+            sierra: {
+                name: "Tahoe Basin (Sierra Nevada, CA)",
+                coords: "38.9° N, 119.9° W",
+                temp: 36,
+                humidity: 14,
+                windSpeed: 28,
+                windDir: 45,
+                dryness: 8,
+                spotting: 4,
+                terrainType: "mountains"
+            },
+            sanfernando: {
+                name: "San Fernando Scrub (Los Angeles, CA)",
+                coords: "34.2° N, 118.5° W",
+                temp: 42,
+                humidity: 8,
+                windSpeed: 45,
+                windDir: 65,
+                dryness: 5,
+                spotting: 7,
+                terrainType: "valley"
+            },
+            bluemountains: {
+                name: "Blue Mountains Bushland (Australia)",
+                coords: "33.7° S, 150.3° E",
+                temp: 39,
+                humidity: 11,
+                windSpeed: 34,
+                windDir: 315,
+                dryness: 7,
+                spotting: 6,
+                terrainType: "mountains"
+            },
+            mediterranean: {
+                name: "Provence Pine Ridge (France)",
+                coords: "43.5° N, 6.9° E",
+                temp: 34,
+                humidity: 18,
+                windSpeed: 22,
+                windDir: 180,
+                dryness: 10,
+                spotting: 3,
+                terrainType: "coastal"
+            },
+            custom: {
+                name: "Custom Geo Domain",
+                coords: "0.0° N, 0.0° E",
+                temp: 32,
+                humidity: 20,
+                windSpeed: 20,
+                windDir: 90,
+                dryness: 12,
+                spotting: 2,
+                terrainType: "valley"
+            }
+        };
+
+        let currentProfileKey = "sierra";
+        let envVars = { ...GEO_PROFILES.sierra };
+
+        // Grid State Buffer
+        let grid = [];
+        let simTicks = 0;
+        let isSimRunning = false;
+        let animRequestId = null;
+        let simSpeedMultiplier = 1.0;
+        let activeTool = 'ignite';
+        let activeLayer = 'fire';
+        let isMouseDown = false;
+
+        // Chart.js Tracking Variables
+        let chartInstance = null;
+        let chartLabels = [0];
+        let chartDataArea = [0];
+
+        // DOM Element Cache
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        const canvasContainer = document.getElementById('canvasContainer');
+
+        class MapGenerator {
+            static generate(cols, rows, terrainType) {
+                const heightMap = [];
+                const fuelMap = [];
+                const seedX = Math.random() * 800;
+                const seedY = Math.random() * 800;
+
+                for (let r = 0; r < rows; r++) {
+                    heightMap[r] = [];
+                    fuelMap[r] = [];
+                    for (let c = 0; c < cols; c++) {
+                        const nx = c / cols - 0.5;
+                        const ny = r / rows - 0.5;
+
+                        let elev = 0.5;
+                        if (terrainType === "mountains") {
+                            elev = 0.5 + 0.35 * Math.sin(nx * 6 + seedX) * Math.cos(ny * 6 + seedY) 
+                                       + 0.15 * Math.sin(nx * 14 + seedX);
+                        } else if (terrainType === "coastal") {
+                            elev = 0.25 + 0.55 * (nx + 0.5) + 0.1 * Math.sin(ny * 8 + seedY);
+                        } else {
+                            elev = 0.4 + 0.2 * Math.sin(nx * 7) * Math.sin(ny * 7);
+                        }
+                        elev = Math.max(0.08, Math.min(0.95, elev));
+
+                        // River or Coastline body
+                        const isWater = terrainType === "coastal" 
+                            ? (c / cols < 0.12) 
+                            : (Math.abs((c/cols) - (r/rows)*0.6 - 0.2) < 0.025);
+
+                        heightMap[r][c] = isWater ? 0.02 : elev;
+
+                        if (isWater) {
+                            fuelMap[r][c] = FUEL_WATER;
+                        } else {
+                            if (elev > 0.68) fuelMap[r][c] = FUEL_DENSE_PINE;
+                            else if (elev > 0.45) fuelMap[r][c] = FUEL_TIMBER;
+                            else if (elev > 0.25) fuelMap[r][c] = FUEL_SCRUB;
+                            else fuelMap[r][c] = FUEL_GRASS;
+                        }
+                    }
+                }
+                return { heightMap, fuelMap };
+            }
+        }
+
+        function initGrid() {
+            const map = MapGenerator.generate(GRID_COLS, GRID_ROWS, envVars.terrainType);
+            grid = [];
+            simTicks = 0;
+
+            for (let r = 0; r < GRID_ROWS; r++) {
+                grid[r] = [];
+                for (let c = 0; c < GRID_COLS; c++) {
+                    const fuel = map.fuelMap[r][c];
+                    grid[r][c] = {
+                        r, c,
+                        elevation: map.heightMap[r][c],
+                        fuelType: fuel,
+                        fuelAmount: fuel === FUEL_WATER ? 0 : 100,
+                        state: fuel === FUEL_WATER ? STATE_WATER : STATE_UNBURNT,
+                        temperature: envVars.temp,
+                        burnDuration: 0,
+                        maxBurnTicks: getFuelBurnDuration(fuel)
+                    };
+                }
+            }
+
+            // Ignite default fire spark in center
+            const startR = Math.floor(GRID_ROWS * 0.5);
+            const startC = Math.floor(GRID_COLS * 0.38);
+            if (grid[startR] && grid[startR][startC] && grid[startR][startC].fuelType !== FUEL_WATER) {
+                grid[startR][startC].state = STATE_BURNING;
+                grid[startR][startC].temperature = 650;
+            }
+
+            chartLabels = [0];
+            chartDataArea = [0];
+            if (chartInstance) {
+                chartInstance.data.labels = chartLabels;
+                chartInstance.data.datasets[0].data = chartDataArea;
+                chartInstance.update();
+            }
+
+            resizeCanvas();
+            renderMap();
+            updateTelemetry();
+        }
+
+        function getFuelBurnDuration(type) {
+            switch(type) {
+                case FUEL_GRASS: return 12;
+                case FUEL_SCRUB: return 24;
+                case FUEL_TIMBER: return 40;
+                case FUEL_DENSE_PINE: return 60;
+                default: return 1;
+            }
+        }
+
+        function stepPhysicsSimulation() {
+            simTicks++;
+            const nextGrid = grid.map(row => row.map(cell => ({ ...cell })));
+
+            // Wind directional vector components
+            const windRad = (envVars.windDir - 90) * (Math.PI / 180);
+            const windVecX = Math.cos(windRad);
+            const windVecY = Math.sin(windRad);
+
+            // Climate Environmental Factor (Rothermel scaling)
+            const tempTerm = (envVars.temp / 30);
+            const humidityTerm = Math.max(0.1, (100 - envVars.humidity) / 50);
+            const moistureTerm = Math.max(0.2, (20 - envVars.dryness) / 10);
+            const climateFactor = tempTerm * humidityTerm / moistureTerm;
+
+            for (let r = 0; r < GRID_ROWS; r++) {
+                for (let c = 0; c < GRID_COLS; c++) {
+                    const cell = grid[r][c];
+
+                    if (cell.state === STATE_BURNING) {
+                        nextGrid[r][c].burnDuration += 1;
+                        nextGrid[r][c].fuelAmount = Math.max(0, 100 - (nextGrid[r][c].burnDuration / cell.maxBurnTicks) * 100);
+                        nextGrid[r][c].temperature = Math.min(850, 400 + (cell.fuelType * 90));
+
+                        if (cell.burnDuration >= cell.maxBurnTicks) {
+                            nextGrid[r][c].state = STATE_BURNED;
+                            nextGrid[r][c].temperature = envVars.temp;
+                        }
+
+                        // Neighbor Propagation (Moore Neighborhood)
+                        const neighbors = getNeighbors(r, c);
+                        for (const n of neighbors) {
+                            const target = grid[n.r][n.c];
+                            if (target.state === STATE_UNBURNT && target.fuelType !== FUEL_WATER) {
+                                const dirX = n.c - c;
+                                const dirY = n.r - r;
+                                const dist = Math.hypot(dirX, dirY);
+                                const normX = dirX / dist;
+                                const normY = dirY / dist;
+
+                                // Wind Amplification Factor (\phi_w)
+                                const windDot = normX * windVecX + normY * windVecY;
+                                const windEffect = Math.max(0.15, 1.0 + (windDot * Math.pow(envVars.windSpeed / 10, 1.3)));
+
+                                // Topographic Slope Factor (\phi_s)
+                                const dz = target.elevation - cell.elevation;
+                                const slopeEffect = dz > 0 ? (1.0 + dz * 4.5) : 0.7;
+
+                                // Base Ignition Probability
+                                const prob = 0.08 * windEffect * slopeEffect * climateFactor;
+
+                                if (Math.random() < prob) {
+                                    nextGrid[n.r][n.c].state = STATE_BURNING;
+                                    nextGrid[n.r][n.c].temperature = 380;
+                                }
+                            }
+                        }
+
+                        // Ember Spotting Transport
+                        if (envVars.spotting > 0 && Math.random() < (envVars.spotting * 0.012 * (envVars.windSpeed / 20))) {
+                            const spotDist = Math.floor(2 + Math.random() * (envVars.windSpeed / 8));
+                            const spotR = Math.round(r + windVecY * spotDist + (Math.random() - 0.5) * 3);
+                            const spotC = Math.round(c + windVecX * spotDist + (Math.random() - 0.5) * 3);
+
+                            if (spotR >= 0 && spotR < GRID_ROWS && spotC >= 0 && spotC < GRID_COLS) {
+                                const target = grid[spotR][spotC];
+                                if (target.state === STATE_UNBURNT && target.fuelType !== FUEL_WATER) {
+                                    nextGrid[spotR][spotC].state = STATE_BURNING;
+                                    nextGrid[spotR][spotC].temperature = 420;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            grid = nextGrid;
+            if (simTicks % 2 === 0) updateTelemetry();
+        }
+
+        function getNeighbors(r, c) {
+            const list = [];
+            for (let dr = -1; dr <= 1; dr++) {
+                for (let dc = -1; dc <= 1; dc++) {
+                    if (dr === 0 && dc === 0) continue;
+                    const nr = r + dr;
+                    const nc = c + dc;
+                    if (nr >= 0 && nr < GRID_ROWS && nc >= 0 && nc < GRID_COLS) {
+                        list.push({ r: nr, c: nc });
+                    }
+                }
+            }
+            return list;
+        }
+
+        function renderMap() {
+            const cellW = canvas.width / GRID_COLS;
+            const cellH = canvas.height / GRID_ROWS;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            for (let r = 0; r < GRID_ROWS; r++) {
+                for (let c = 0; c < GRID_COLS; c++) {
+                    const cell = grid[r][c];
+                    const x = c * cellW;
+                    const y = r * cellH;
+
+                    let color = '#060911';
+                    if (activeLayer === 'fire') color = getFireColor(cell);
+                    else if (activeLayer === 'thermal') color = getThermalColor(cell.temperature);
+                    else if (activeLayer === 'fuel') color = getFuelColor(cell);
+                    else if (activeLayer === 'elevation') color = getElevationColor(cell.elevation);
+                    else if (activeLayer === 'wind') color = getWindFieldColor(cell);
+
+                    ctx.fillStyle = color;
+                    ctx.fillRect(Math.floor(x), Math.floor(y), Math.ceil(cellW), Math.ceil(cellH));
+                }
+            }
+
+            // Overlay Wind Direction Arrows if Wind Field Layer active
+            if (activeLayer === 'wind') {
+                renderWindArrows(cellW, cellH);
+            }
+        }
+
+        function getFireColor(cell) {
+            switch(cell.state) {
+                case STATE_WATER: return '#0284c7';
+                case STATE_FIREBREAK: return '#78350f';
+                case STATE_RETARDANT: return '#06b6d4';
+                case STATE_BURNED: return '#090d16';
+                case STATE_BURNING:
+                    return Math.random() > 0.4 ? '#f97316' : '#ef4444';
+                case STATE_UNBURNT:
+                default:
+                    if (cell.fuelType === FUEL_GRASS) return '#4ade80';
+                    if (cell.fuelType === FUEL_SCRUB) return '#22c55e';
+                    if (cell.fuelType === FUEL_TIMBER) return '#15803d';
+                    if (cell.fuelType === FUEL_DENSE_PINE) return '#14532d';
+                    return '#1e293b';
+            }
+        }
+
+        function getThermalColor(temp) {
+            if (temp <= 40) return '#0f172a';
+            if (temp <= 120) return '#1e3a8a';
+            if (temp <= 300) return '#ca8a04';
+            if (temp <= 550) return '#ea580c';
+            return '#dc2626';
+        }
+
+        function getFuelColor(cell) {
+            if (cell.fuelType === FUEL_WATER) return '#0284c7';
+            if (cell.fuelType === FUEL_GRASS) return '#fef08a';
+            if (cell.fuelType === FUEL_SCRUB) return '#86efac';
+            if (cell.fuelType === FUEL_TIMBER) return '#22c55e';
+            if (cell.fuelType === FUEL_DENSE_PINE) return '#14532d';
+            return '#334155';
+        }
+
+        function getElevationColor(elev) {
+            const v = Math.floor(elev * 210);
+            return `rgb(${v + 25}, ${v + 15}, ${v + 5})`;
+        }
+
+        function getWindFieldColor(cell) {
+            return cell.elevation > 0.5 ? '#1e1b4b' : '#0f172a';
+        }
+
+        function renderWindArrows(cellW, cellH) {
+            ctx.strokeStyle = 'rgba(129, 140, 248, 0.4)';
+            ctx.lineWidth = 1;
+            const step = 8;
+            const rad = (envVars.windDir - 90) * (Math.PI / 180);
+
+            for (let r = step/2; r < GRID_ROWS; r += step) {
+                for (let c = step/2; c < GRID_COLS; c += step) {
+                    const cx = c * cellW;
+                    const cy = r * cellH;
+                    ctx.beginPath();
+                    ctx.moveTo(cx, cy);
+                    ctx.lineTo(cx + Math.cos(rad) * 12, cy + Math.sin(rad) * 12);
+                    ctx.stroke();
+                }
+            }
+        }
+
+        function resizeCanvas() {
+            const rect = canvasContainer.getBoundingClientRect();
+            let w = rect.width - 16;
+            let h = w / 1.48;
+            if (h > rect.height - 16) {
+                h = rect.height - 16;
+                w = h * 1.48;
+            }
+            canvas.width = Math.floor(w);
+            canvas.height = Math.floor(h);
+            renderMap();
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        function handlePointerAction(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+            const col = Math.floor(((clientX - rect.left) / rect.width) * GRID_COLS);
+            const row = Math.floor(((clientY - rect.top) / rect.height) * GRID_ROWS);
+
+            if (row >= 0 && row < GRID_ROWS && col >= 0 && col < GRID_COLS) {
+                const cell = grid[row][col];
+                if (activeTool === 'ignite' && cell.fuelType !== FUEL_WATER) {
+                    cell.state = STATE_BURNING;
+                    cell.temperature = 650;
+                } else if (activeTool === 'firebreak') {
+                    cell.state = STATE_FIREBREAK;
+                    cell.fuelType = FUEL_WATER;
+                } else if (activeTool === 'water') {
+                    cell.state = STATE_RETARDANT;
+                    cell.temperature = envVars.temp;
+                } else if (activeTool === 'inspect') {
+                    updateInspectorCard(cell);
+                }
+                renderMap();
+                updateTelemetry();
+            }
+        }
+
+        canvas.addEventListener('mousedown', (e) => { isMouseDown = true; handlePointerAction(e); });
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const col = Math.floor(((e.clientX - rect.left) / rect.width) * GRID_COLS);
+            const row = Math.floor(((e.clientY - rect.top) / rect.height) * GRID_ROWS);
+            if (row >= 0 && row < GRID_ROWS && col >= 0 && col < GRID_COLS) {
+                updateInspectorCard(grid[row][col]);
+            }
+            if (isMouseDown) handlePointerAction(e);
+        });
+        window.addEventListener('mouseup', () => isMouseDown = false);
+
+        canvas.addEventListener('touchstart', (e) => { isMouseDown = true; handlePointerAction(e); });
+        canvas.addEventListener('touchmove', (e) => { if (isMouseDown) handlePointerAction(e); });
+        canvas.addEventListener('touchend', () => isMouseDown = false);
+
+        function updateInspectorCard(cell) {
+            document.getElementById('inspPos').textContent = `[ ${cell.c} , ${cell.r} ]`;
+            
+            let stateText = 'Unburnt Vegetation';
+            let stateClass = 'text-emerald-400';
+            if (cell.state === STATE_BURNING) { stateText = '🔥 Flaming Front'; stateClass = 'text-red-500 font-bold'; }
+            if (cell.state === STATE_BURNED) { stateText = 'Charred Scar'; stateClass = 'text-slate-400'; }
+            if (cell.state === STATE_FIREBREAK) { stateText = 'Bulldozer Dirt Line'; stateClass = 'text-amber-400'; }
+            if (cell.state === STATE_RETARDANT) { stateText = 'Aerial Retardant Drop'; stateClass = 'text-cyan-400'; }
+            if (cell.state === STATE_WATER) { stateText = 'Water Body'; stateClass = 'text-blue-400'; }
+
+            document.getElementById('inspState').textContent = stateText;
+            document.getElementById('inspState').className = `font-semibold ${stateClass}`;
+
+            const fuelNames = ['Water', 'Light Grass', 'Chaparral Scrub', 'Mixed Timber', 'Dense Conifer Pine'];
+            document.getElementById('inspFuel').textContent = fuelNames[cell.fuelType] || 'None';
+            document.getElementById('inspSlope').textContent = `${(cell.elevation * 100).toFixed(1)}% Elevation`;
+            document.getElementById('inspTemp').textContent = `${cell.temperature.toFixed(1)} °C`;
+            document.getElementById('inspLoad').textContent = `${cell.fuelAmount.toFixed(0)}% Fuel Load`;
+        }
+
+        document.getElementById('locationSelect').addEventListener('change', (e) => {
+            currentProfileKey = e.target.value;
+            if (currentProfileKey === 'custom') {
+                document.getElementById('btnConfigureCustom').classList.remove('hidden');
+                document.getElementById('customGeoModal').classList.remove('hidden');
+            } else {
+                document.getElementById('btnConfigureCustom').classList.add('hidden');
+                applyGeoProfile(currentProfileKey);
+            }
+        });
+
+        document.getElementById('btnConfigureCustom').addEventListener('click', () => {
+            document.getElementById('customGeoModal').classList.remove('hidden');
+        });
+
+        document.getElementById('btnCloseCustomModal').addEventListener('click', () => {
+            document.getElementById('customGeoModal').classList.add('hidden');
+        });
+
+        document.getElementById('btnApplyCustomLoc').addEventListener('click', () => {
+            const name = document.getElementById('inputCustomName').value || "Custom Geo Domain";
+            const lat = document.getElementById('inputCustomLat').value || "0.0° N";
+            const lng = document.getElementById('inputCustomLng').value || "0.0° E";
+            const terrain = document.getElementById('selectCustomTerrain').value;
+
+            GEO_PROFILES.custom.name = name;
+            GEO_PROFILES.custom.coords = `${lat}, ${lng}`;
+            GEO_PROFILES.custom.terrainType = terrain;
+
+            applyGeoProfile('custom');
+            document.getElementById('customGeoModal').classList.add('hidden');
+        });
+
+        function applyGeoProfile(key) {
+            envVars = { ...GEO_PROFILES[key] };
+            document.getElementById('displayCoords').textContent = envVars.coords;
+
+            // Sync Sliders
+            document.getElementById('inputTemp').value = envVars.temp;
+            document.getElementById('lblTemp').textContent = `${envVars.temp} °C`;
+            document.getElementById('inputWindSpeed').value = envVars.windSpeed;
+            document.getElementById('lblWindSpeed').textContent = `${envVars.windSpeed} km/h`;
+            document.getElementById('inputWindDir').value = envVars.windDir;
+            document.getElementById('lblWindDir').textContent = `${getCompassCardinal(envVars.windDir)} (${envVars.windDir}°)`;
+            document.getElementById('compassNeedle').style.transform = `rotate(${envVars.windDir}deg)`;
+            document.getElementById('inputHumidity').value = envVars.humidity;
+            document.getElementById('lblHumidity').textContent = `${envVars.humidity} %`;
+            document.getElementById('inputDryness').value = envVars.dryness;
+            document.getElementById('lblDryness').textContent = `${envVars.dryness} % (Dry)`;
+            document.getElementById('inputSpotting').value = envVars.spotting;
+
+            updateFireDangerIndex();
+            initGrid();
+        }
+
+        // Sliders Listeners
+        document.getElementById('inputTemp').addEventListener('input', (e) => {
+            envVars.temp = parseFloat(e.target.value);
+            document.getElementById('lblTemp').textContent = `${envVars.temp} °C`;
+            updateFireDangerIndex();
+        });
+
+        document.getElementById('inputWindSpeed').addEventListener('input', (e) => {
+            envVars.windSpeed = parseFloat(e.target.value);
+            document.getElementById('lblWindSpeed').textContent = `${envVars.windSpeed} km/h`;
+            updateFireDangerIndex();
+        });
+
+        document.getElementById('inputWindDir').addEventListener('input', (e) => {
+            envVars.windDir = parseInt(e.target.value);
+            document.getElementById('lblWindDir').textContent = `${getCompassCardinal(envVars.windDir)} (${envVars.windDir}°)`;
+            document.getElementById('compassNeedle').style.transform = `rotate(${envVars.windDir}deg)`;
+            if (activeLayer === 'wind') renderMap();
+        });
+
+        document.getElementById('inputHumidity').addEventListener('input', (e) => {
+            envVars.humidity = parseFloat(e.target.value);
+            document.getElementById('lblHumidity').textContent = `${envVars.humidity} %`;
+            updateFireDangerIndex();
+        });
+
+        document.getElementById('inputDryness').addEventListener('input', (e) => {
+            envVars.dryness = parseInt(e.target.value);
+            document.getElementById('lblDryness').textContent = `${envVars.dryness} % (Dry)`;
+            updateFireDangerIndex();
+        });
+
+        document.getElementById('inputSpotting').addEventListener('input', (e) => {
+            envVars.spotting = parseInt(e.target.value);
+            document.getElementById('lblSpotting').textContent = envVars.spotting > 6 ? 'High' : (envVars.spotting > 3 ? 'Moderate' : 'Low');
+        });
+
+        document.getElementById('btnResetPhysics').addEventListener('click', () => {
+            applyGeoProfile(currentProfileKey);
+        });
+
+        // Preset Scenarios Selection
+        document.querySelectorAll('.preset-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const p = btn.dataset.preset;
+                if (p === 'santa_ana') {
+                    envVars.windSpeed = 58; envVars.temp = 41; envVars.humidity = 7; envVars.windDir = 65; envVars.spotting = 8;
+                } else if (p === 'summer_drought') {
+                    envVars.temp = 44; envVars.humidity = 6; envVars.dryness = 4; envVars.windSpeed = 25; envVars.spotting = 5;
+                } else if (p === 'ridge_trap') {
+                    envVars.windSpeed = 35; envVars.windDir = 0; envVars.temp = 37; envVars.humidity = 12;
+                } else if (p === 'prescribed') {
+                    envVars.windSpeed = 10; envVars.temp = 22; envVars.humidity = 40; envVars.spotting = 1;
+                }
+                applyGeoProfile(currentProfileKey);
+            });
+        });
+
+        // Tool Buttons
+        document.querySelectorAll('.tool-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tool-btn').forEach(b => {
+                    b.classList.remove('active', 'border-orange-500/60', 'bg-orange-500/20', 'text-orange-300');
+                    b.classList.add('bg-slate-800/50', 'text-slate-400', 'border-slate-800');
+                });
+                btn.classList.add('active', 'border-orange-500/60', 'bg-orange-500/20', 'text-orange-300');
+                activeTool = btn.dataset.tool;
+            });
+        });
+
+        // Layer Switcher Buttons
+        document.querySelectorAll('.layer-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.layer-btn').forEach(b => {
+                    b.classList.remove('active', 'text-orange-400', 'bg-slate-800', 'border-slate-700/80');
+                    b.classList.add('text-slate-400');
+                });
+                btn.classList.add('active', 'text-orange-400', 'bg-slate-800', 'border-slate-700/80');
+                activeLayer = btn.dataset.layer;
+                renderMap();
+            });
+        });
+
+        // Speed Multipliers
+        document.querySelectorAll('.speed-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.speed-btn').forEach(b => {
+                    b.classList.remove('active', 'bg-orange-600', 'text-white');
+                    b.classList.add('text-slate-400');
+                });
+                btn.classList.add('active', 'bg-orange-600', 'text-white');
+                simSpeedMultiplier = parseFloat(btn.dataset.speed);
+            });
+        });
+
+        // Play / Pause Simulation
+        const btnPlayPause = document.getElementById('btnPlayPause');
+        const playIcon = document.getElementById('playIcon');
+
+        function toggleSimulation() {
+            isSimRunning = !isSimRunning;
+            if (isSimRunning) {
+                playIcon.className = 'fa-solid fa-pause text-sm';
+                btnPlayPause.className = 'w-10 h-10 rounded-full bg-amber-600 hover:bg-amber-500 text-white flex items-center justify-center shadow-lg transition';
+                mainLoop();
+            } else {
+                playIcon.className = 'fa-solid fa-play text-sm ml-0.5';
+                btnPlayPause.className = 'w-10 h-10 rounded-full bg-orange-600 hover:bg-orange-500 text-white flex items-center justify-center shadow-lg transition';
+                if (animRequestId) cancelAnimationFrame(animRequestId);
+            }
+        }
+
+        btnPlayPause.addEventListener('click', toggleSimulation);
+
+        document.getElementById('btnStep').addEventListener('click', () => {
+            if (!isSimRunning) {
+                stepPhysicsSimulation();
+                renderMap();
+            }
+        });
+
+        document.getElementById('btnReset').addEventListener('click', () => {
+            if (isSimRunning) toggleSimulation();
+            initGrid();
+        });
+
+        document.getElementById('btnExtinguish').addEventListener('click', () => {
+            for (let r = 0; r < GRID_ROWS; r++) {
+                for (let c = 0; c < GRID_COLS; c++) {
+                    if (grid[r][c].state === STATE_BURNING) {
+                        grid[r][c].state = STATE_BURNED;
+                    }
+                }
+            }
+            renderMap();
+            updateTelemetry();
+        });
+
+        // Math Documentation Modal handlers
+        document.getElementById('btnOpenMathModal').addEventListener('click', () => {
+            document.getElementById('mathDocModal').classList.remove('hidden');
+            renderMathEquations();
+        });
+        document.getElementById('btnCloseMathModal').addEventListener('click', () => {
+            document.getElementById('mathDocModal').classList.add('hidden');
+        });
+
+        function renderMathEquations() {
+            if (window.katex) {
+                katex.render("R = \\frac{I_r \\cdot (1 + \\phi_w + \\phi_s)}{\\rho_b \\cdot \\varepsilon \\cdot Q_{ig}}", document.getElementById('katexEq1'), { displayMode: true });
+                katex.render("\\phi_w = C \\cdot U^B \\cdot \\left(\\frac{\\beta}{\\beta_{op}}\\right)^{-E}, \\quad \\phi_s = 5.275 \\cdot \\beta^{-0.3} \\cdot (\\tan\\theta)^2", document.getElementById('katexEq2'), { displayMode: true });
+                katex.render("P(x,y,t+1) = 1 - \\prod_{(x',y') \\in \\mathcal{N}} \\left[ 1 - P_{base} \\cdot (1 + \\phi_w) \\cdot (1 + \\phi_s) \\right]", document.getElementById('katexEq3'), { displayMode: true });
+            }
+        }
+
+        function getCompassCardinal(deg) {
+            const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+            return dirs[Math.round(deg / 45) % 8];
+        }
+
+        function updateFireDangerIndex() {
+            const index = envVars.temp + (envVars.windSpeed * 0.9) - (envVars.humidity * 0.4) + (15 - envVars.dryness);
+            const el = document.getElementById('valFireDanger');
+            if (index > 75) { el.textContent = "EXTREME"; el.className = "font-bold text-red-500 font-mono"; }
+            else if (index > 50) { el.textContent = "HIGH"; el.className = "font-bold text-amber-400 font-mono"; }
+            else { el.textContent = "MODERATE"; el.className = "font-bold text-emerald-400 font-mono"; }
+        }
+
+        function updateTelemetry() {
+            let activeCount = 0;
+            let burnedCount = 0;
+            let totalLand = 0;
+            let maxTemp = envVars.temp;
+
+            for (let r = 0; r < GRID_ROWS; r++) {
+                for (let c = 0; c < GRID_COLS; c++) {
+                    const cell = grid[r][c];
+                    if (cell.fuelType !== FUEL_WATER) totalLand++;
+                    if (cell.state === STATE_BURNING) activeCount++;
+                    if (cell.state === STATE_BURNED) burnedCount++;
+                    if (cell.temperature > maxTemp) maxTemp = cell.temperature;
+                }
+            }
+
+            const burnedHa = Math.floor((burnedCount + activeCount) * 0.45);
+            const burnedPct = (((burnedCount + activeCount) / totalLand) * 100).toFixed(1);
+
+            document.getElementById('statBurnedArea').textContent = `${burnedHa} ha`;
+            document.getElementById('statBurnedPct').textContent = `${burnedPct}% of domain`;
+            document.getElementById('statActiveCells').textContent = `${activeCount} cells`;
+            document.getElementById('statPeakTemp').textContent = `${maxTemp.toFixed(0)} °C`;
+
+            const mwEnergy = Math.floor(activeCount * 1.8 * (envVars.windSpeed / 20));
+            document.getElementById('statEnergyRelease').textContent = `${mwEnergy} MW`;
+
+            const simHours = (simTicks * 0.1).toFixed(1);
+            document.getElementById('lblTimeStep').textContent = `t = ${simHours} hrs`;
+
+            if (simTicks % 3 === 0 && chartInstance) {
+                chartLabels.push(`${simHours}h`);
+                chartDataArea.push(burnedHa);
+                if (chartLabels.length > 20) {
+                    chartLabels.shift();
+                    chartDataArea.shift();
+                }
+                chartInstance.update();
+            }
+        }
+
+        function initTelemetryChart() {
+            const ctxChart = document.getElementById('telemetryChart').getContext('2d');
+            chartInstance = new Chart(ctxChart, {
+                type: 'line',
+                data: {
+                    labels: chartLabels,
+                    datasets: [{
+                        label: 'Burn Scar (ha)',
+                        data: chartDataArea,
+                        borderColor: '#ea580c',
+                        backgroundColor: 'rgba(234, 88, 12, 0.2)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { color: 'rgba(31, 41, 55, 0.4)' }, ticks: { color: '#6b7280', font: { size: 9 } } },
+                        y: { grid: { color: 'rgba(31, 41, 55, 0.4)' }, ticks: { color: '#6b7280', font: { size: 9 } } }
+                    }
+                }
+            });
+        }
+
+        // Main Animation Frame Loop
+        let lastFrameTime = 0;
+        function mainLoop(timestamp = 0) {
+            if (!isSimRunning) return;
+            if (timestamp - lastFrameTime > (120 / simSpeedMultiplier)) {
+                stepPhysicsSimulation();
+                renderMap();
+                lastFrameTime = timestamp;
+            }
+            animRequestId = requestAnimationFrame(mainLoop);
+        }
+
+        // Bootstrapper on window ready
+        window.onload = function() {
+            initTelemetryChart();
+            applyGeoProfile('sierra');
+        };
+    </script>
+</body>
+</html>
